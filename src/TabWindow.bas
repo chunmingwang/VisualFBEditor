@@ -8703,9 +8703,10 @@ Sub TabWindow.FormDesign(NotForms As Boolean = False)
 	Dim ActiveCtrlName As String
 	Dim SelControlNames As WStringList
 	Dim bSelControlFind As Boolean
-	Dim As WString * 255 ResourceFile = GetResourceFile(True)
+	Dim As UString ResourceFile
 	txtCode.DropDownTypeElement = 0
 	If CInt(NotForms = False) AndAlso CInt(Des) Then
+		ResourceFile = GetResourceFile(True)
 		With *Des
 			If Des->SymbolsReadProperty(pfImageListEditor->CurrentImageList) Then CurrentImageListName = WGet(Des->Symbols(pfImageListEditor->CurrentImageList)->ReadPropertyFunc(pfImageListEditor->CurrentImageList, "Name"))
 			If Des->SymbolsReadProperty(pfMenuEditor->ActiveCtrl) Then ActiveCtrlName = WGet(Des->Symbols(pfMenuEditor->ActiveCtrl)->ReadPropertyFunc(pfMenuEditor->ActiveCtrl, "Name"))
@@ -8879,20 +8880,20 @@ Sub TabWindow.FormDesign(NotForms As Boolean = False)
 	Dim As String CurrentCondition
 	Dim As WStringList WithArgs, Namespaces, Includes
 	Dim ConstructionBlocks As List
-	Dim As WString * 2048 Comments, b, b0, b1, b2, bTrim, bTrimLCase, b0Trim, b0TrimLCase
-	Dim As Boolean IsBas = EndsWith(LCase(FileName), ".bas") OrElse EndsWith(LCase(FileName), ".frm"), inFunc
+	Dim As UString sFileName = FileName
+	Dim As UString Comments, b, b0, b1, b2, bTrim, bTrimLCase, b0Trim, b0TrimLCase
+	Dim As Boolean IsBas = EndsWith(LCase(sFileName), ".bas") OrElse EndsWith(LCase(sFileName), ".frm"), inFunc
 	Dim FileEncoding As FileEncodings, NewLineType As NewLineTypes
 	Dim As Integer WithConstructionLine = -1, OldWithConstructionLine = -1
 	Dim As List Constructs, ConstructBlocks, IfConstructBlocks
 	Dim As WString Ptr FLine
 	If IsBas Then
-		WLet(FLine1, ..Left(FileName, Len(FileName) - 4) & ".bi")
+		WLet(FLine1, ..Left(sFileName, Len(sFileName) - 4) & ".bi")
 		WLet(FLine2, GetFileName(*FLine1))
 	Else
 		WLet(FLine1, "")
 		WLet(FLine2, "")
 	End If
-	Dim As WString * 255 sFileName = FileName
 	Dim As TabWindow Ptr tb
 	Dim As Integer OldIncludeLine = -1
 	Dim As WStringList Ptr LastFileList
@@ -9580,7 +9581,7 @@ Sub TabWindow.FormDesign(NotForms As Boolean = False)
 					ElseIf inFunc AndAlso func <> 0 AndAlso func->ElementType = E_Enum Then
 						If StartsWith(bTrim, "#") OrElse StartsWith(bTrim, "'") Then Continue For
 						Dim As String t
-						Dim As WString * 2048 b2 = bTrim, ElementValue
+						Dim As UString b2 = bTrim, ElementValue
 						Dim As WString Ptr res1()
 						Dim As Integer uu
 						Pos2 = InStr(b2, "'")

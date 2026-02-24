@@ -541,51 +541,198 @@ Namespace My.Sys.Forms
 		If Index = 0 Then FHistory.Clear
 	End Sub
 	
-	Function TextWithoutQuotesAndComments(subject As String, OldCommentIndex As Integer = 0, WithoutComments As Boolean = True, WithoutBracket As Boolean = False, WithoutDoubleSpaces As Boolean = False) As String
-		Dim As String Result, ch, sLine = subject
-		Dim As Integer cc, iPos = -1
-		Dim As Boolean q, c
-		For i As Integer = 1 To OldCommentIndex
-			iPos = InStr(iPos + 1, sLine, "'/")
-		Next
-		If iPos = 0 Then Return Space(Len(subject)) Else sLine = Space(iPos + 1) & Mid(sLine, iPos + 2)
-		For i As Integer = 0 To Len(sLine)
-			ch = Mid(sLine, i, 1)
-			If Not c AndAlso ch = """" Then
-				q = Not q
-				Result += """"
-			ElseIf Not q AndAlso ch = "/" AndAlso Mid(sLine, i + 1, 1) = "'" Then
+	'Function TextWithoutQuotesAndComments(subject As String, OldCommentIndex As Integer = 0, WithoutComments As Boolean = True, WithoutBracket As Boolean = False, WithoutDoubleSpaces As Boolean = False) As String
+	'	Dim As String Result, ch, sLine = subject
+	'	Dim As Integer cc, iPos = -1, n = Len(subject)
+	'	Dim As Boolean q, c
+	'	For i As Integer = 1 To OldCommentIndex
+	'		iPos = InStr(iPos + 1, sLine, "'/")
+	'	Next
+	'	If iPos = 0 Then Return Space(n) Else sLine = Space(iPos + 1) & Mid(sLine, iPos + 2)
+	'	For i As Integer = 0 To Len(sLine)
+	'		ch = Mid(sLine, i, 1)
+	'		If Not c AndAlso ch = """" Then
+	'			q = Not q
+	'			Result += """"
+	'		ElseIf Not q AndAlso ch = "/" AndAlso Mid(sLine, i + 1, 1) = "'" Then
+	'			c = True
+	'			cc += 1
+	'			Result += " "
+	'		ElseIf Not q AndAlso ch = "/" AndAlso Mid(sLine, i - 1, 1) = "'" Then
+	'			cc -= 1
+	'			If cc = 0 Then
+	'				c = False
+	'			ElseIf cc < 0 Then
+	'				Result += Space(n - i + 1)
+	'				Exit For
+	'			End If
+	'			Result += " "
+	'		ElseIf c OrElse q Then
+	'			Result += " "
+	'		ElseIf CInt(WithoutComments) AndAlso CInt(ch = "'" OrElse LCase(Mid(sLine, i, 4)) = "rem ") Then
+	'			Result += Space(n - i + 1)
+	'			Exit For
+	'		ElseIf WithoutBracket AndAlso ch = "(" Then
+	'			Result += " "
+	'		ElseIf ch = !"\t" Then
+	'			Result += " "
+	'		ElseIf WithoutDoubleSpaces AndAlso CBool(ch = " ") AndAlso EndsWith(Result, " ") Then
+	'			Result += ""
+	'		Else
+	'			Result += ch
+	'		End If
+	'	Next
+	'	Return Result
+	'End Function
+	
+	Function TextWithoutQuotesAndComments(subject As String, _
+		OldCommentIndex As Integer = 0, _
+		WithoutComments As Boolean = True, _
+		WithoutBracket As Boolean = False, _
+		WithoutDoubleSpaces As Boolean = False) As String
+		Dim As Integer n = Len(subject)
+		If n = 0 Then Return ""
+		
+		' Preallocate result buffer
+		Dim As String result = Space(n)
+		Dim As UByte Ptr src = StrPtr(subject)
+		Dim As UByte Ptr dst = StrPtr(result)
+		
+		Dim As Integer i = 0, w = 0
+		Dim As Boolean q = False         ' inside string ""
+		Dim As Boolean c = False         ' inside block comment /' ... '/
+		Dim As Integer cc = 0            ' depth of nested block comments
+		Dim As Integer iPos = -1         ' for OldCommentIndex
+		Dim As Integer lastSpace = 0     ' for removing double spaces
+		
+		' ---------------------------
+		' 1. Process OldCommentIndex
+		' ---------------------------
+		If OldCommentIndex > 0 Then
+			For j As Integer = 1 To OldCommentIndex
+				iPos = InStr(iPos + 1, subject, "'/")
+				If iPos = 0 Then Exit For
+			Next
+			If iPos = 0 Then Return Space(n)
+			' Replace all characters up to OldCommentIndex with spaces
+			For j As Integer = 1 To iPos
+				dst[w] = 32
+				w += 1
+			Next
+			i = iPos
+		End If
+		
+		' ---------------------------
+		' 2. Main loop
+		' ---------------------------
+		While i < n
+			Dim As UByte ch = src[i]
+			
+			' ---------------------------
+			' 2.1 String handling ""
+			' ---------------------------
+			If Not c AndAlso Not q AndAlso ch = 34 Then
+				q = True
+				dst[w] = 34
+				lastSpace = 0
+				
+			ElseIf q AndAlso ch = 34 Then
+				q = False
+				dst[w] = 34
+				lastSpace = 0
+				
+				' ---------------------------
+				' 2.2 Start of block comment /'
+				' ---------------------------
+			ElseIf Not q AndAlso ch = 47 AndAlso i < n - 1 AndAlso src[i + 1] = 39 Then
 				c = True
 				cc += 1
-				Result += " "
-			ElseIf Not q AndAlso ch = "/" AndAlso Mid(sLine, i - 1, 1) = "'" Then
+				dst[w] = 32
+				dst[w + 1] = 32
+				lastSpace = 1
+				i += 1  ' skip the next char of /'
+				
+				' ---------------------------
+				' 2.3 End of block comment '/
+				' ---------------------------
+			ElseIf Not q AndAlso ch = 39 AndAlso i < n - 1 AndAlso src[i + 1] = 47 Then
 				cc -= 1
-				If cc = 0 Then
-					c = False
-				ElseIf cc < 0 Then
-					Result += Space(Len(subject) - i + 1)
-					Exit For
+				dst[w] = 32
+				dst[w + 1] = 32
+				lastSpace = 1
+				If cc <= 0 Then c = False
+				i += 1  ' skip the next char of '/
+				
+				' ---------------------------
+				' 2.4 Inside string or block comment
+				' ---------------------------
+			ElseIf q OrElse c Then
+				dst[w] = 32
+				lastSpace = 1
+				
+				' ---------------------------
+				' 2.5 Single-line comment ' or REM
+				' ---------------------------
+			ElseIf WithoutComments AndAlso ch = 39 Then
+				' rest of the line -> spaces
+				For j As Integer = w To n - 1
+					dst[j] = 32
+				Next
+				Exit While
+				
+			ElseIf WithoutComments AndAlso CBool((ch = 82 OrElse ch = 114) AndAlso _
+				i <= n - 4 AndAlso _
+				(src[i + 1] = 69 OrElse src[i + 1] = 101) AndAlso _
+				(src[i + 2] = 77 OrElse src[i + 2] = 109) AndAlso _
+				src[i + 3] = 32) Then
+				
+				' Fill rest of line with spaces (same length behaviour)
+				For j As Integer = w To n - 1
+					dst[j] = 32
+				Next
+				Exit While
+				
+				' ---------------------------
+				' 2.6 Remove '(' if requested
+				' ---------------------------
+			ElseIf WithoutBracket AndAlso ch = 40 Then
+				dst[w] = 32
+				lastSpace = 1
+				
+				' ---------------------------
+				' 2.7 Tab character
+				' ---------------------------
+			ElseIf ch = 9 Then
+				dst[w] = 32
+				lastSpace = 1
+				
+				' ---------------------------
+				' 2.8 Remove double spaces
+				' ---------------------------
+			ElseIf WithoutDoubleSpaces AndAlso ch = 32 Then
+				If lastSpace = 0 Then
+					dst[w] = 32
+					lastSpace = 1
+				Else
+					w -= 1  ' skip repeated space
 				End If
-				Result += " "
-			ElseIf c OrElse q Then
-				Result += " "
-			ElseIf CInt(WithoutComments) AndAlso CInt(ch = "'" OrElse LCase(Mid(sLine, i, 4)) = "rem ") Then
-				Result += Space(Len(subject) - i + 1)
-				Exit For
-			ElseIf WithoutBracket AndAlso ch = "(" Then
-				Result += " "
-			ElseIf ch = !"\t" Then
-				Result += " "
-			ElseIf WithoutDoubleSpaces AndAlso CBool(ch = " ") AndAlso EndsWith(Result, " ") Then
-				Result += ""
+				
+				' ---------------------------
+				' 2.9 Normal character
+				' ---------------------------
 			Else
-				Result += ch
+				dst[w] = ch
+				lastSpace = 0
 			End If
-		Next
-		Return Result
+			
+			i += 1
+			w += 1
+		Wend
+		
+		Return Left(result, w)
 	End Function
 	
-	Function EditControlContent.GetConstruction(ByRef wLine As WString, ByRef iType As Integer = 0, OldCommentIndex As Integer = 0, InAsm As Boolean = False) As Integer
+	Function EditControlContent.GetConstruction(ByRef wLine As WString, ByRef iType As Integer = 0, OldCommentIndex As Integer = 0, InAsm As Boolean = False, TextIsWithoutQuotesAndComments As Boolean = False) As Integer
 		On Error Goto ErrorHandler
 		If Trim(wLine, Any !"\t ") = "" Then Return -1
 		Dim As String sLine = wLine
@@ -599,7 +746,7 @@ Namespace My.Sys.Forms
 		'		Next
 		'		If iPos = 0 Then Return -1 Else sLine = Mid(sLine, iPos + 2)
 		'		iPos = InStr(sLine, "/'")
-		sLine = TextWithoutQuotesAndComments(sLine, OldCommentIndex, False, True, True)
+		If Not TextIsWithoutQuotesAndComments Then sLine = TextWithoutQuotesAndComments(sLine, OldCommentIndex, False, True, True)
 		iPos = InStr(sLine, "'")
 		If iPos = 0 Then iPos = Len(sLine) Else iPos -= 1
 		For i As Integer = 0 To UBound(Constructions)
@@ -931,7 +1078,7 @@ Namespace My.Sys.Forms
 							ecsOld_ = ecs_
 						Next iiii
 					Next
-					i = GetConstruction(*LineText_, j, 0, ecsOld_->InAsm)
+					i = GetConstruction(*LineText_, j, 0, ecsOld_->InAsm, True)
 					If ecsOld_->ConstructionIndex <> i OrElse ecsOld_->ConstructionPart <> j Then
 						ecsOld_->ConstructionIndex = i
 						ecsOld_->ConstructionPart = j
@@ -970,7 +1117,7 @@ Namespace My.Sys.Forms
 				If Len(RTrim(*LineTextOld)) > iPosSymbol AndAlso Mid(RTrim(*LineTextOld), iPosSymbol + 1, 1) = " " Then
 					WAdd(LineText_, " 1")
 				End If
-				i = GetConstruction(*LineText_, j, IIf(eclOld = 0, 0, eclOld->CommentIndex), ecl->InAsm)
+				i = GetConstruction(*LineText_, j, IIf(eclOld = 0, 0, eclOld->CommentIndex), ecl->InAsm, True)
 			End If
 			ecs->ConstructionIndex = i
 			ecs->ConstructionPart = j
@@ -2907,7 +3054,7 @@ Namespace My.Sys.Forms
 		Var OldHScrollEnabledRight = CBool(HScrollMaxRight)
 		Var OldHScrollMaxRight = HScrollMaxRight
 		Var OldHScrollVCRight = HScrollVCRight
-		HScrollMaxRight = 10000 'Max(0, (MaxLineWidth - (dwClientX - LeftMargin - dwCharX))) \ dwCharX
+		HScrollMaxRight = 1024 'Max(0, (MaxLineWidth - (dwClientX - LeftMargin - dwCharX))) \ dwCharX
 		HScrollVCRight = 10
 		If CBool(OldHScrollMaxRight <> HScrollMaxRight) OrElse CBool(OldHScrollVCRight <> HScrollVCRight) OrElse WithChange Then
 			#ifdef __USE_GTK__
@@ -2931,7 +3078,7 @@ Namespace My.Sys.Forms
 			Var OldHScrollEnabledLeft = CBool(HScrollMaxLeft)
 			Var OldHScrollMaxLeft = HScrollMaxLeft
 			Var OldHScrollVCLeft = HScrollVCLeft
-			HScrollMaxLeft = 10000 'Max(0, (MaxLineWidth - (dwClientX - LeftMargin - dwCharX))) \ dwCharX
+			HScrollMaxLeft = 1024 'Max(0, (MaxLineWidth - (dwClientX - LeftMargin - dwCharX))) \ dwCharX
 			HScrollVCLeft = 10
 			Var HScrollEnabledLeft = CBool(HScrollMaxLeft)
 			
