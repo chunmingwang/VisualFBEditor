@@ -41,8 +41,6 @@ How should you choose between these two frameworks in practice? You can follow t
 *   **If your application must support Windows XP**: Then you **have no choice but to use DirectShow**.
 *   **If your application has extreme requirements for hardware acceleration and performance**: Media Foundation, with its native support for DXVA 2.0, typically offers better performance and lower CPU usage when processing high-resolution video (such as 4K/8K).
 
-I hope this information helps you better understand the differences between DirectShow and Media Foundation. If you have specific development scenarios or application needs, feel free to let me know, and we can discuss which framework might be more suitable for you~
-
 DirectShow和Media Foundation是微软公司在Windows平台上推出的两个重要的多媒体开发框架。简单来说，Media Foundation是DirectShow的继任者，专为现代Windows系统设计，而DirectShow则是一项将被逐步取代的旧技术。
 
 为了让你更直观地理解，我把它们的核心区别整理成下面的表格：
@@ -80,5 +78,3 @@ Media Foundation的“简”：Media Foundation提供了更高级的编程模型
 如果你的应用必须支持Windows XP：那么你别无选择，只能使用DirectShow。
 
 如果你的应用对硬件加速和性能有极致要求：Media Foundation由于原生支持DXVA 2.0，在处理高分辨率视频（如4K/8K）时通常会提供更好的性能和更低的CPU占用率。
-
-希望这些信息能帮助你更好地理解DirectShow和Media Foundation的区别。如果你有具体的开发场景或应用需求，也可以告诉我，我们一起看看哪个框架更适合你～
