@@ -106,7 +106,7 @@ pfFind = @fFind
 			.Name = "chkUsePatternMatching"
 			.Text = ".*"
 			.TabIndex = 6
-			.Hint = ML("Use Pattern Matching")
+			.Hint = ML("Use Regular Expressions")
 			.Caption = ".*"
 			.SetBounds 345, 1, 30, 21
 			.Designer = @This
@@ -239,6 +239,63 @@ pfFind = @fFind
 	#endif
 '#End Region
 
+'' -------------------------------------------------------------
+'' Regex-based search helpers, used when chkUsePatternMatching is
+'' checked. One compiled Regex is cached per (pattern, case) pair
+'' so scanning many lines/files doesn't recompile the pattern on
+'' every call -- mirrors how InStrMatch() was used before.
+'' -------------------------------------------------------------
+'' NOTE: the compiled Regex is a function-local Static, NOT a
+'' Dim Shared/global. A Dim Shared UDT is constructed during static
+'' initialization, BEFORE the app has called CoInitialize -- and
+'' Regex's internal VBScript.RegExp COM object needs COM to already
+'' be up. Building it too early leaves an invalid COM pointer and
+'' crashes (SIGSEGV) the first time Compile()/SetPattern() is called.
+'' A Static local is constructed lazily on first call instead, i.e.
+'' well after the app (and COM) has started, while still persisting
+'' between calls so the pattern isn't recompiled every time.
+'' Forward search, drop-in replacement for InStrMatch(Text, Pattern, StartPos):
+'' returns the 1-based position of the match (0 if none). Unlike
+'' InStrMatch, it also reports the real match length in MatchLen --
+'' a regex match is NOT always the same length as the pattern text.
+Function RegexInStr(ByRef Text As Const WString, ByRef Pattern As Const WString, ByVal StartPos As Integer = 1, ByVal MatchCase As Boolean = True, ByRef MatchLen As Integer = 0) As Integer
+	Static As Regex re
+	Static As WString * 1024 rePattern
+	Static As Boolean reCase
+	MatchLen = 0
+	If Len(* (@Pattern)) < 1 Then Return 0
+	If Pattern <> rePattern OrElse MatchCase <> reCase Then
+		re.SetPattern(Pattern, IIf(MatchCase, reNone, reIgnoreCase))
+		rePattern = Pattern
+		reCase = MatchCase
+	End If
+	If re.IsValid() = False Then Return 0
+	If StartPos < 1 Then StartPos = 1
+	If StartPos - 1 > Len(Text) Then Return 0
+	Dim As RegexMatch mtch = re.Match(Text, StartPos - 1)
+	If mtch.Success = False Then Return 0
+	MatchLen = mtch.Length
+	Return mtch.Index + 1
+End Function
+
+'' Backward search, drop-in replacement for InStrRev(Text, Pattern, LimitChar):
+'' mff/Regex.bi only searches forward, so the "previous match" is found
+'' by scanning forward from the start and remembering the last match
+'' that starts at-or-before LimitChar.
+Function RegexInStrRev(ByRef Text As Const WString, ByRef Pattern As Const WString, ByVal LimitChar As Integer, ByVal MatchCase As Boolean = True, ByRef MatchLen As Integer = 0) As Integer
+	MatchLen = 0
+	If Len(* (@Pattern)) < 1 Then Return 0
+	Dim As Integer pos_ = 1, foundPos = 0, foundLen = 0, mLen
+	Do
+		Dim As Integer p = RegexInStr(Text, Pattern, pos_, MatchCase, mLen)
+		If p = 0 OrElse p > LimitChar Then Exit Do
+		foundPos = p : foundLen = mLen
+		pos_ = p + IIf(mLen <= 0, 1, mLen)
+	Loop
+	MatchLen = foundLen
+	Return foundPos
+End Function
+
 Public Function frmFind.Find(Down As Boolean, bNotShowResults As Boolean = False) As Integer
 	If txtFind.Text = "" OrElse mTabSelChangeByError Then Exit Function
 	If CInt(*gSearchSave <> txtFind.Text OrElse plvSearch->ListItems.Count < 1) AndAlso CInt(cboFindRange.ItemIndex = 2) Then FindAll plvSearch, tpFind, , False : WLet(gSearchSave, txtFind.Text) : Exit Function
@@ -247,6 +304,7 @@ Public Function frmFind.Find(Down As Boolean, bNotShowResults As Boolean = False
 	Dim txt As EditControl Ptr = @tb->txtCode
 	Dim Result As Integer
 	Dim As Boolean bMatchCase = chkMatchCase.Checked
+	Dim As Boolean bUsePatternMatching = chkUsePatternMatching.Checked
 	Dim buff As WString Ptr
 	Dim As Integer i, SearchCount, SearchLen
 	If txtFind.Text <> "" AndAlso Not txtFind.Contains(txtFind.Text) Then txtFind.AddItem txtFind.Text
@@ -260,6 +318,7 @@ Public Function frmFind.Find(Down As Boolean, bNotShowResults As Boolean = False
 	Dim As ListViewItem Ptr Item
 	SearchCount = plvSearch->ListItems.Count - 1
 	SearchLen = Len(*gSearchSave)
+	Dim As Integer MatchLen = SearchLen
 	If gSearchItemIndex < 0 OrElse gSearchItemIndex > SearchCount Then gSearchItemIndex = 0
 	plvSearch->SelectedItemIndex = gSearchItemIndex
 	If Down Then
@@ -285,10 +344,14 @@ Public Function frmFind.Find(Down As Boolean, bNotShowResults As Boolean = False
 		End If
 		For i = iStartLine To iSelEndLine
 			buff = @txt->Lines(i)
-			If bMatchCase Then
+			If bUsePatternMatching Then
+				Result = RegexInStr(*buff, *gSearchSave, iStartChar, bMatchCase, MatchLen)
+			ElseIf bMatchCase Then
 				Result = InStr(iStartChar, *buff, *gSearchSave)
+				MatchLen = SearchLen
 			Else
 				Result = InStr(iStartChar, LCase(*buff), LCase(*gSearchSave))
+				MatchLen = SearchLen
 			End If
 			If Result > 0 Then Exit For
 			iStartChar = 1
@@ -315,16 +378,20 @@ Public Function frmFind.Find(Down As Boolean, bNotShowResults As Boolean = False
 		For i = iStartLine To iSelStartLine Step -1
 			buff = @txt->Lines(i)
 			If i <> iStartLine Then iStartChar = Len(*buff)
-			If bMatchCase Then
+			If bUsePatternMatching Then
+				Result = RegexInStrRev(*buff, *gSearchSave, iStartChar, bMatchCase, MatchLen)
+			ElseIf bMatchCase Then
 				Result = InStrRev(*buff, *gSearchSave, iStartChar)
+				MatchLen = SearchLen
 			Else
 				Result = InStrRev(LCase(*buff), LCase(*gSearchSave), iStartChar)
+				MatchLen = SearchLen
 			End If
 			If Result > 0 Then Exit For
 		Next i
 	End If
 	If Result > 0 Then
-		txt->SetSelection i, i, Result - 1, Result + Len(*gSearchSave) - 1
+		txt->SetSelection i, i, Result - 1, Result + MatchLen - 1
 		If SearchCount >= 0 Then
 			Dim As Integer jj, iPos, RowIndexFirst
 			If Down Then
@@ -748,22 +815,21 @@ Private Function frmFind.FindAll(ByRef lvSearchResult As ListView Ptr, tTab As T
 		WLet(gSearchSave, *Search)
 		tb->txtCode.ModifiedLine = False
 		Pos1 = iSelStartChar
+		Dim As Integer MatchLen = Len(*Search)
 		For i As Integer = iSelStartLine To iSelEndLine
 			buff = @tb->txtCode.Lines(i)
 			Do
 				If bUsePatternMatching Then
-					If bMatchCase Then
-						Pos1 = InStrMatch(IIf(i = iSelEndLine, .Left(*buff, iSelEndChar + 1), *buff), *Search, Pos1 + 1)
-					Else
-						Pos1 = InStrMatch(LCase(IIf(i = iSelEndLine, .Left(*buff, iSelEndChar + 1), *buff)), LCase(*Search), Pos1 + 1)
-					End If
+					Pos1 = RegexInStr(IIf(i = iSelEndLine, .Left(*buff, iSelEndChar + 1), *buff), *Search, Pos1 + 1, bMatchCase, MatchLen)
 				ElseIf bMatchCase Then
 					Pos1 = InStr(Pos1 + 1, IIf(i = iSelEndLine, .Left(*buff, iSelEndChar + 1), *buff), *Search)
+					MatchLen = Len(*Search)
 				Else
 					Pos1 = InStr(Pos1 + 1, LCase(IIf(i = iSelEndLine, .Left(*buff, iSelEndChar + 1), *buff)), LCase(*Search))
+					MatchLen = Len(*Search)
 				End If
 				If bMatchWholeWords AndAlso Pos1 > 0 Then
-					If IsNotAlpha(Mid(*buff, Pos1 - 1, 1)) AndAlso IsNotAlpha(Mid(*buff, Pos1 + Len(*Search), 1)) Then Exit Do
+					If IsNotAlpha(Mid(*buff, Pos1 - 1, 1)) AndAlso IsNotAlpha(Mid(*buff, Pos1 + MatchLen, 1)) Then Exit Do
 				Else
 					Exit Do
 				End If
@@ -777,21 +843,19 @@ Private Function frmFind.FindAll(ByRef lvSearchResult As ListView Ptr, tTab As T
 					lvSearchResult->ListItems.Item(lvSearchResult->ListItems.Count - 1)->Tag = tb
 				End If
 				If i <= tb->txtCode.LineIndex Then gSearchItemIndex = lvSearchResult->ListItems.Count - 1
-				Pos1 = Pos1 + Len(*Search) - 1
+				Pos1 = Pos1 + IIf(MatchLen <= 0, 1, MatchLen) - 1
 				Do
 					If bUsePatternMatching Then
-						If bMatchCase Then
-							Pos1 = InStrMatch(IIf(i = iSelEndLine, .Left(*buff, iSelEndChar + 1), *buff), *Search, Pos1 + 1)
-						Else
-							Pos1 = InStrMatch(LCase(IIf(i = iSelEndLine, .Left(*buff, iSelEndChar + 1), *buff)), LCase(*Search), Pos1 + 1)
-						End If
+						Pos1 = RegexInStr(IIf(i = iSelEndLine, .Left(*buff, iSelEndChar + 1), *buff), *Search, Pos1 + 1, bMatchCase, MatchLen)
 					ElseIf bMatchCase Then
 						Pos1 = InStr(Pos1 + 1, IIf(i = iSelEndLine, .Left(*buff, iSelEndChar + 1), *buff), *Search)
+						MatchLen = Len(*Search)
 					Else
 						Pos1 = InStr(Pos1 + 1, LCase(IIf(i = iSelEndLine, .Left(*buff, iSelEndChar + 1), *buff)), LCase(*Search))
+						MatchLen = Len(*Search)
 					End If
 					If bMatchWholeWords AndAlso Pos1 > 0 Then
-						If IsNotAlpha(Mid(*buff, Pos1 - 1, 1)) AndAlso IsNotAlpha(Mid(*buff, Pos1 + Len(*Search), 1)) Then Exit Do
+						If IsNotAlpha(Mid(*buff, Pos1 - 1, 1)) AndAlso IsNotAlpha(Mid(*buff, Pos1 + MatchLen, 1)) Then Exit Do
 					Else
 						Exit Do
 					End If

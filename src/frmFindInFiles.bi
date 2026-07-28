@@ -14,8 +14,10 @@
 #include once "dir.bi"
 #include once "TabWindow.bi"
 #include once "mff/Panel.bi"
+#include once "mff/Regex.bi"
 
 Using My.Sys.Forms
+Using My.Sys.Text
 
 '#Region "Form"
 	Type frmFindInFiles Extends Form

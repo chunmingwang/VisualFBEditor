@@ -162,9 +162,9 @@ pfFindFile = @fFindFile
 		' chkUsePatternMatching
 		With chkUsePatternMatching
 			.Name = "chkUsePatternMatching"
-			.Text = ML("Use Pattern Matching")
+			.Text = ML("Use Regular Expressions")
 			.TabIndex = 8
-			.Caption = ML("Use Pattern Matching")
+			.Caption = ML("Use Regular Expressions")
 			.SetBounds 252, 63, 150, 22
 			.Parent = @Panel1
 		End With
@@ -196,6 +196,39 @@ pfFindFile = @fFindFile
 		
 	End Destructor
 '#End Region
+
+'' -------------------------------------------------------------
+'' Regex-based search helper, used when chkUsePatternMatching is
+'' checked. One compiled Regex is cached per (pattern, case) pair
+'' so scanning many lines/files doesn't recompile the pattern on
+'' every call -- mirrors how InStrMatch() was used before.
+'' -------------------------------------------------------------
+'' NOTE: the compiled Regex is a function-local Static, NOT a
+'' Dim Shared/global -- see frmFind.frm for why a Shared UDT here
+'' crashes (it gets constructed before COM is initialized).
+'' Forward search, drop-in replacement for InStrMatch(Text, Pattern, StartPos):
+'' returns the 1-based position of the match (0 if none). Unlike
+'' InStrMatch, it also reports the real match length in MatchLen --
+'' a regex match is NOT always the same length as the pattern text.
+Function RegexInStrFiles(ByRef Text As Const WString, ByRef Pattern As Const WString, ByVal StartPos As Integer = 1, ByVal MatchCase As Boolean = True, ByRef MatchLen As Integer = 0) As Integer
+	Static As Regex re
+	Static As WString * 1024 rePattern
+	Static As Boolean reCase
+	MatchLen = 0
+	If Len(* (@Pattern)) < 1 Then Return 0
+	If Pattern <> rePattern OrElse MatchCase <> reCase Then
+		re.SetPattern(Pattern, IIf(MatchCase, reNone, reIgnoreCase))
+		rePattern = Pattern
+		reCase = MatchCase
+	End If
+	If re.IsValid() = False Then Return 0
+	If StartPos < 1 Then StartPos = 1
+	If StartPos - 1 > Len(Text) Then Return 0
+	Dim As RegexMatch mtch = re.Match(Text, StartPos - 1)
+	If mtch.Success = False Then Return 0
+	MatchLen = mtch.Length
+	Return mtch.Index + 1
+End Function
 
 Sub frmFindInFiles.Find(ByRef lvSearchResult As ListView Ptr, ByRef Path As WString = "", ByRef tSearch As WString = "")
 	Dim f As WString * 1024
@@ -238,20 +271,19 @@ Sub frmFindInFiles.Find(ByRef lvSearchResult As ListView Ptr, ByRef Path As WStr
 					Line Input #Fn, Buff
 					iLine += 1
 					Pos1 = 0
+					Dim As Integer MatchLen = Len(tSearch)
 					Do
 						If UsePatternMatching Then
-							If MatchCase Then
-								Pos1 = InStrMatch(Buff, tSearch, Pos1 + 1)
-							Else
-								Pos1 = InStrMatch(LCase(Buff), LCase(tSearch), Pos1 + 1)
-							End If
+							Pos1 = RegexInStrFiles(Buff, tSearch, Pos1 + 1, MatchCase, MatchLen)
 						ElseIf MatchCase Then
 							Pos1 = InStr(Pos1 + 1, Buff, tSearch)
+							MatchLen = Len(tSearch)
 						Else
 							Pos1 = InStr(Pos1 + 1, LCase(Buff), LCase(tSearch))
+							MatchLen = Len(tSearch)
 						End If
 						If MatchWholeWords AndAlso Pos1 > 0 Then
-							If IsNotAlpha(Mid(Buff, Pos1 - 1, 1)) AndAlso IsNotAlpha(Mid(Buff, Pos1 + Len(tSearch), 1)) Then Exit Do
+							If IsNotAlpha(Mid(Buff, Pos1 - 1, 1)) AndAlso IsNotAlpha(Mid(Buff, Pos1 + MatchLen, 1)) Then Exit Do
 						Else
 							Exit Do
 						End If
@@ -264,21 +296,19 @@ Sub frmFindInFiles.Find(ByRef lvSearchResult As ListView Ptr, ByRef Path As WStr
 						lvSearchResult->ListItems.Item(lvSearchResult->ListItems.Count - 1)->Text(3) = Path & IIf(EndsWith(Path, Slash), "", Slash) & f
 						pfrmMain->Update
 						ThreadsLeave
-						Pos1 = Pos1 + Len(tSearch) - 1
+						Pos1 = Pos1 + IIf(MatchLen <= 0, 1, MatchLen) - 1
 						Do
 							If UsePatternMatching Then
-								If MatchCase Then
-									Pos1 = InStrMatch(Buff, tSearch, Pos1 + 1)
-								Else
-									Pos1 = InStrMatch(LCase(Buff), LCase(tSearch), Pos1 + 1)
-								End If
+								Pos1 = RegexInStrFiles(Buff, tSearch, Pos1 + 1, MatchCase, MatchLen)
 							ElseIf MatchCase Then
 								Pos1 = InStr(Pos1 + 1, Buff, tSearch)
+								MatchLen = Len(tSearch)
 							Else
 								Pos1 = InStr(Pos1 + 1, LCase(Buff), LCase(tSearch))
+								MatchLen = Len(tSearch)
 							End If
 							If MatchWholeWords AndAlso Pos1 > 0 Then
-								If IsNotAlpha(Mid(Buff, Pos1 - 1, 1)) AndAlso IsNotAlpha(Mid(Buff, Pos1 + Len(tSearch), 1)) Then Exit Do
+								If IsNotAlpha(Mid(Buff, Pos1 - 1, 1)) AndAlso IsNotAlpha(Mid(Buff, Pos1 + MatchLen, 1)) Then Exit Do
 							Else
 								Exit Do
 							End If

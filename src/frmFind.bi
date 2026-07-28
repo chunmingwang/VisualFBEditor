@@ -14,9 +14,11 @@
 #include once "mff/TrackBar.bi"
 #include once "mff/Label.bi"
 #include once "mff/RadioButton.bi"
+#include once "mff/Regex.bi"
 #include once "TabWindow.bi"
 
 Using My.Sys.Forms
+Using My.Sys.Text
 
 '#Region "Form"
 	Type frmFind Extends Form

@@ -66,6 +66,8 @@ On Error Goto AA
 
 Declare Sub DebugPrint_(ByRef MSG As WString)
 
+#include once "mff/SysUtils.bi"
+#include once "mff/Regex.bi"
 #include once "Main.bi"
 #include once "Debug.bi"
 #include once "Designer.bi"
