@@ -10350,6 +10350,7 @@ Sub TabWindow.FormDesign(NotForms As Boolean = False)
 		'FillAllProperties
 	End If
 	'Functions.Sort 'Already sorted while add items
+	txtCode.Content.Functions.Sort
 	If cboClass.ItemIndex = 0 Then
 		Dim As TypeElement Ptr te2
 		Dim t As Boolean
