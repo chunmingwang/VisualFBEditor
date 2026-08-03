@@ -143,7 +143,7 @@ Sub FormatProject(UnFormat As Any Ptr)
 				tn1 = tn->Nodes.Item(j)
 				If tn1 <> 0 Then
 					ee = tn1->Tag
-					If ee <> 0 AndAlso (EndsWith(*ee->FileName, ".bas") OrElse EndsWith(*ee->FileName, ".bi") OrElse EndsWith(*ee->FileName, ".inc") OrElse EndsWith(*ee->FileName, ".frm")) Then
+					If ee <> 0 AndAlso (EndsWith(*ee->FileName, ".bas") OrElse EndsWith(*ee->FileName, ".bi") OrElse EndsWith(*ee->FileName, ".inc") OrElse (EndsWith(*ee->FileName, ".frm") OrElse EndsWith(*ee->FileName, ".rpt"))) Then
 						tb = GetTab(*ee->FileName)
 						If tb = 0 Then
 							txt.LoadFromFile(*ee->FileName, FileEncoding, NewLineType)
@@ -156,7 +156,7 @@ Sub FormatProject(UnFormat As Any Ptr)
 					End If
 				End If
 			Next
-		ElseIf (EndsWith(*ee->FileName, ".bas") OrElse EndsWith(*ee->FileName, ".bi") OrElse EndsWith(*ee->FileName, ".inc") OrElse EndsWith(*ee->FileName, ".frm")) Then
+		ElseIf (EndsWith(*ee->FileName, ".bas") OrElse EndsWith(*ee->FileName, ".bi") OrElse EndsWith(*ee->FileName, ".inc") OrElse (EndsWith(*ee->FileName, ".frm") OrElse EndsWith(*ee->FileName, ".rpt"))) Then
 			tb = GetTab(*ee->FileName)
 			If tb = 0 Then
 				txt.LoadFromFile(*ee->FileName, FileEncoding, NewLineType)
@@ -231,7 +231,7 @@ Sub NumberingProject(pSender As Any Ptr)
 				tn1 = tn->Nodes.Item(j)
 				If tn1 <> 0 Then
 					ee = tn1->Tag
-					If ee <> 0 AndAlso (EndsWith(LCase(*ee->FileName), ".bas") OrElse EndsWith(LCase(*ee->FileName), ".bi") OrElse EndsWith(LCase(*ee->FileName), ".inc") OrElse EndsWith(LCase(*ee->FileName), ".frm")) Then
+					If ee <> 0 AndAlso (EndsWith(LCase(*ee->FileName), ".bas") OrElse EndsWith(LCase(*ee->FileName), ".bi") OrElse EndsWith(LCase(*ee->FileName), ".inc") OrElse (EndsWith(LCase(*ee->FileName), ".frm") OrElse EndsWith(LCase(*ee->FileName), ".rpt"))) Then
 						tb = GetTab(*ee->FileName)
 						If tb = 0 Then
 							txt.LoadFromFile(*ee->FileName, FileEncoding, NewLineType)
@@ -251,7 +251,7 @@ Sub NumberingProject(pSender As Any Ptr)
 					End If
 				End If
 			Next
-		ElseIf (EndsWith(LCase(*ee->FileName), ".bas") OrElse EndsWith(LCase(*ee->FileName), ".bi") OrElse EndsWith(LCase(*ee->FileName), ".inc") OrElse EndsWith(LCase(*ee->FileName), ".frm")) Then
+		ElseIf (EndsWith(LCase(*ee->FileName), ".bas") OrElse EndsWith(LCase(*ee->FileName), ".bi") OrElse EndsWith(LCase(*ee->FileName), ".inc") OrElse (EndsWith(LCase(*ee->FileName), ".frm") OrElse EndsWith(LCase(*ee->FileName), ".rpt"))) Then
 			tb = GetTab(*ee->FileName)
 			If tb = 0 Then
 				txt.LoadFromFile(*ee->FileName, FileEncoding, NewLineType)
@@ -1389,7 +1389,11 @@ Function TabWindow.ReadObjProperty(ByRef Obj As Any Ptr, ByRef PropertyName As S
 			If Idx <> -1 Then WLet(FLine, Events.Item(Idx)->Text)
 		Case E_Property, E_Field
 			'Var Pos1 = InStr(PropertyName, ".")
-			pTemp = st->ReadPropertyFunc(Obj, PropertyName)
+			If Des <> 0 AndAlso st->ReadPropertyFunc <> 0 Then
+				pTemp = st->ReadPropertyFunc(Obj, PropertyName)
+			Else
+				pTemp = 0
+			End If
 			If pTemp <> 0 Then
 				Select Case LCase(.TypeName)
 				Case "wstring", "wstring ptr", "wstringlist", "dictionary", "point", "size": WLet(FLine, QWString(pTemp))
@@ -1402,12 +1406,11 @@ Function TabWindow.ReadObjProperty(ByRef Obj As Any Ptr, ByRef PropertyName As S
 						tbi = pGlobalEnums->Object(iIndex)
 						If tbi Then
 							Dim As TypeElement Ptr te1
-							Dim As Integer enumIndex = -1
 							For i As Integer = 0 To tbi->Elements.Count - 1
 								te1 = tbi->Elements.Object(i)
-								If te1 <> 0 AndAlso te1->Value = Str(iTemp) Then enumIndex = i: Exit For
+								If te1 <> 0 AndAlso te1->Value = Str(iTemp) Then iTemp = i: Exit For
 							Next
-							If enumIndex >= 0 AndAlso enumIndex <= tbi->Elements.Count - 1 Then WLet(FLine, WStr(enumIndex) & " - " & tbi->Elements.Item(enumIndex))
+							If iTemp >= 0 AndAlso iTemp <= tbi->Elements.Count - 1 Then WLet(FLine, WStr(iTemp) & " - " & tbi->Elements.Item(iTemp))
 						End If
 					End If
 				Case "long": iTemp = QLong(pTemp): WLet(FLine, WStr(iTemp))
@@ -1423,12 +1426,11 @@ Function TabWindow.ReadObjProperty(ByRef Obj As Any Ptr, ByRef PropertyName As S
 						tbi = pGlobalEnums->Object(iIndex)
 						If tbi Then
 							Dim As TypeElement Ptr te1
-							Dim As Integer enumIndex = -1
 							For i As Integer = 0 To tbi->Elements.Count - 1
 								te1 = tbi->Elements.Object(i)
-								If te1 <> 0 AndAlso te1->Value = Str(iTemp) Then enumIndex = i: Exit For
+								If te1 <> 0 AndAlso te1->Value = Str(iTemp) Then iTemp = i: Exit For
 							Next
-							If enumIndex >= 0 AndAlso enumIndex <= tbi->Elements.Count - 1 Then WLet(FLine, WStr(enumIndex) & " - " & tbi->Elements.Item(enumIndex))
+							If iTemp >= 0 AndAlso iTemp <= tbi->Elements.Count - 1 Then WLet(FLine, WStr(iTemp) & " - " & tbi->Elements.Item(iTemp))
 						End If
 					End If
 				End Select
@@ -2006,7 +2008,7 @@ Sub DesignerDeleteControl(ByRef Sender As Designer, Ctrl As Any Ptr)
 	Var s = 0
 	Dim As EditControl Ptr ptxtCode, ptxtCodeBi
 	Dim As EditControl txtCodeBi
-	Dim As Boolean bFind, IsBas = EndsWith(LCase(tb->FileName), ".bas") OrElse EndsWith(LCase(tb->FileName), ".frm")
+	Dim As Boolean bFind, IsBas = EndsWith(LCase(tb->FileName), ".bas") OrElse (EndsWith(LCase(tb->FileName), ".frm") OrElse EndsWith(LCase(tb->FileName), ".rpt"))
 	Dim As Integer iStart, iEnd, i = 0, k
 	tb->txtCode.Changing "Unsurni o`chirish"
 	'tb->txtCode.SaveToFile(GetBakFileName(tb->FileName), tb->FileEncoding, tb->NewLineType)
@@ -2153,7 +2155,7 @@ Function ChangeControl(ByRef Sender As Designer, Cpnt As Any Ptr, ByRef Property
 	Dim As Integer iLeft1, iTop1, iWidth1, iHeight1
 	Dim As EditControl Ptr ptxtCode, ptxtCodeBi
 	Dim As EditControl txtCodeBi
-	Dim As Boolean bFind, IsBas = EndsWith(LCase(tb->FileName), ".bas") OrElse EndsWith(LCase(tb->FileName), ".frm")
+	Dim As Boolean bFind, IsBas = EndsWith(LCase(tb->FileName), ".bas") OrElse (EndsWith(LCase(tb->FileName), ".frm") OrElse EndsWith(LCase(tb->FileName), ".rpt"))
 	Dim As Boolean bOldChangingStarted = tb->txtCode.ChangingStarted
 	Dim As Integer iStart, iEnd, i, k, dj
 	WLet(FLine1, "")
@@ -2516,7 +2518,7 @@ End Function
 
 Sub TabWindow.CheckExtension(ByRef sFileName As WString)
 	txtCode.Content.CStyle = CInt(EndsWith(LCase(sFileName), ".rc")) OrElse CInt(EndsWith(LCase(sFileName), ".c")) OrElse CInt(EndsWith(LCase(sFileName), ".cxx")) OrElse CInt(EndsWith(LCase(sFileName), ".cpp")) OrElse CInt(EndsWith(LCase(sFileName), ".java")) OrElse CInt(EndsWith(LCase(sFileName), ".h")) OrElse CInt(EndsWith(LCase(sFileName), ".idl")) OrElse CInt(EndsWith(LCase(sFileName), ".xml")) OrElse CInt(EndsWith(LCase(sFileName), ".bat"))
-	txtCode.SyntaxEdit = txtCode.Content.CStyle OrElse CInt(sFileName = "") OrElse CInt(EndsWith(LCase(sFileName), ".bas")) OrElse CInt(EndsWith(LCase(sFileName), ".frm")) OrElse CInt(EndsWith(LCase(sFileName), ".bi")) OrElse CInt(EndsWith(LCase(sFileName), ".inc"))
+	txtCode.SyntaxEdit = txtCode.Content.CStyle OrElse CInt(sFileName = "") OrElse CInt(EndsWith(LCase(sFileName), ".bas")) OrElse CInt((EndsWith(LCase(sFileName), ".frm") OrElse EndsWith(LCase(sFileName), ".rpt"))) OrElse CInt(EndsWith(LCase(sFileName), ".bi")) OrElse CInt(EndsWith(LCase(sFileName), ".inc"))
 End Sub
 
 Sub TabWindow.ChangeName(ByRef OldName As WString, ByRef NewName As WString)
@@ -2535,7 +2537,7 @@ Sub TabWindow.ChangeName(ByRef OldName As WString, ByRef NewName As WString)
 	Dim As EditControl txtCodeBi
 	Dim As EditControl Ptr ptxtCode, ptxtCodeBi
 	Dim As Integer iStart, iEnd
-	Dim As Boolean bFind, IsBas = EndsWith(LCase(tb->FileName), ".bas") OrElse EndsWith(LCase(tb->FileName), ".frm")
+	Dim As Boolean bFind, IsBas = EndsWith(LCase(tb->FileName), ".bas") OrElse (EndsWith(LCase(tb->FileName), ".frm") OrElse EndsWith(LCase(tb->FileName), ".rpt"))
 	For i As Integer = 0 To tb->txtCode.LinesCount - 1
 		GetBiFile(ptxtCode, txtCodeBi, ptxtCodeBi, tb, IsBas, bFind, i, iStart, iEnd)
 		For k As Integer = iStart To iEnd
@@ -2846,7 +2848,7 @@ Sub DesignerInsertControl(ByRef Sender As Designer, ByRef ClassName As String, C
 	Dim As EditControl txtCodeBi
 	Dim As EditControl Ptr ptxtCode, ptxtCodeBi
 	Dim As Integer iStart, iEnd, j
-	Dim As Boolean bFind, IsBas = EndsWith(LCase(tb->FileName), ".bas") OrElse EndsWith(LCase(tb->FileName), ".frm")
+	Dim As Boolean bFind, IsBas = EndsWith(LCase(tb->FileName), ".bas") OrElse (EndsWith(LCase(tb->FileName), ".frm") OrElse EndsWith(LCase(tb->FileName), ".rpt"))
 	Dim tbi As TypeElement Ptr
 	If SelectedTool <> 0 Then
 		tbi = SelectedTool->Tag
@@ -3499,7 +3501,7 @@ Sub FindEvent(tbw As TabWindow Ptr, Cpnt As Any Ptr, EventName As String)
 	If ii < 0 Then Exit Sub
 	Dim As EditControl Ptr ptxtCode, ptxtCodeBi, ptxtCodeType, ptxtCodeConstructor
 	Dim As EditControl txtCodeBi
-	Dim As Boolean bFind, IsBas = EndsWith(LCase(tb->FileName), ".bas") OrElse EndsWith(LCase(tb->FileName), ".frm")
+	Dim As Boolean bFind, IsBas = EndsWith(LCase(tb->FileName), ".bas") OrElse (EndsWith(LCase(tb->FileName), ".frm") OrElse EndsWith(LCase(tb->FileName), ".rpt"))
 	Dim As Integer iStart, iEnd, i, k
 	Dim As WString Ptr FLine1
 	Dim As WStringList WithArgs
@@ -4375,7 +4377,7 @@ Function AddPaths(tb As TabWindow Ptr, ByRef Path As WString, ByRef Starts As WS
 	While f <> ""
 		If (Attr And fbDirectory) <> 0 Then
 			If Not AddFileSorted(tb, f, Starts, c, "Folder") Then Return False
-		ElseIf EndsWith(LCase(f), ".bas") OrElse EndsWith(LCase(f), ".bi") OrElse EndsWith(LCase(f), ".inc") OrElse EndsWith(LCase(f), ".frm") Then
+		ElseIf EndsWith(LCase(f), ".bas") OrElse EndsWith(LCase(f), ".bi") OrElse EndsWith(LCase(f), ".inc") OrElse (EndsWith(LCase(f), ".frm") OrElse EndsWith(LCase(f), ".rpt")) Then
 			If Not AddFileSorted(tb, f, Starts, c) Then Return False
 		End If
 		f = Dir(Attr)
@@ -7615,7 +7617,7 @@ Sub LoadFunctionsWithContent(ByRef FileName As WString, ByRef Project As Project
 	Dim As Integer WithConstructionLine = -1, OldWithConstructionLine = -1
 	Dim As WString Ptr FPath, FLine1, FLine2
 	Dim As String CurrentCondition
-	Dim As Boolean IsBas = EndsWith(LCase(FileName), ".bas") OrElse EndsWith(LCase(FileName), ".frm"), inFunc, bFind, bCurrentFile
+	Dim As Boolean IsBas = EndsWith(LCase(FileName), ".bas") OrElse (EndsWith(LCase(FileName), ".frm") OrElse EndsWith(LCase(FileName), ".rpt")), inFunc, bFind, bCurrentFile
 	Dim As Integer IncludesCount
 	Dim As Boolean IncludesChanged
 	Dim As List Constructs, ConstructBlocks
@@ -8527,7 +8529,7 @@ Sub Suggestions
 		If Project->Contents.Count = 0 Then
 			pstBar->Panels[0]->Caption = ML("Loading project contents ...")
 			For i As Integer = 0 To Project->Files_.Count - 1
-				If EndsWith(Project->Files_.Item(i), ".bas") OrElse EndsWith(Project->Files_.Item(i), ".frm") OrElse EndsWith(Project->Files_.Item(i), ".bi") OrElse EndsWith(Project->Files_.Item(i), ".inc") Then
+				If EndsWith(Project->Files_.Item(i), ".bas") OrElse (EndsWith(Project->Files_.Item(i), ".frm") OrElse EndsWith(Project->Files_.Item(i), ".rpt")) OrElse EndsWith(Project->Files_.Item(i), ".bi") OrElse EndsWith(Project->Files_.Item(i), ".inc") Then
 					ecc = _New(EditControlContent)
 					ecc->FileName = Project->Files_.Item(i)
 					ecc->Globals = @Project->Globals
@@ -8928,7 +8930,7 @@ Sub TabWindow.FormDesign(NotForms As Boolean = False)
 	Dim ConstructionBlocks As List
 	Dim As UString sFileName = FileName
 	Dim As UString Comments, b, b0, b1, b2, bTrim, bTrimLCase, b0Trim, b0TrimLCase
-	Dim As Boolean IsBas = EndsWith(LCase(sFileName), ".bas") OrElse EndsWith(LCase(sFileName), ".frm"), inFunc
+	Dim As Boolean IsBas = EndsWith(LCase(sFileName), ".bas") OrElse (EndsWith(LCase(sFileName), ".frm") OrElse EndsWith(LCase(sFileName), ".rpt")), inFunc
 	Dim FileEncoding As FileEncodings, NewLineType As NewLineTypes
 	Dim As Integer WithConstructionLine = -1, OldWithConstructionLine = -1
 	Dim As List Constructs, ConstructBlocks, IfConstructBlocks
